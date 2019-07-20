@@ -1,0 +1,37 @@
+let
+    /**********************************************************
+    * 
+    * Author: Michal Dvorak WITH(NOLOCK)
+    * Since: 20.07.2019
+    * Twitter: @nolockcz
+    *
+    * Source code: https://github.com/nolockcz/PowerQuery
+    *
+    *********************************************************/
+
+    // get current datetimezone from web API
+    DateTimeApiResult = Json.Document(Web.Contents("http://worldtimeapi.org/api/timezone/Europe/Berlin")),
+
+    // parse datetimezone timestamps from text
+    UtcTimestamp = DateTimeZone.FromText(DateTimeApiResult[utc_datetime]),
+    LocalTimestamp = DateTimeZone.FromText(DateTimeApiResult[datetime]), 
+
+    Result = #table(
+        type table
+        [
+            #"UTC timestamp" = datetime, 
+            #"UTC date" = date,
+            #"Local timestamp with offset" = datetimezone,
+            #"Local timestamp without offset" = datetime
+        ], 
+        {
+            {
+            UtcTimestamp,
+            DateTime.Date(UtcTimestamp),
+            LocalTimestamp,
+            DateTimeZone.RemoveZone(LocalTimestamp)
+            }
+        }
+    )
+in
+    Result

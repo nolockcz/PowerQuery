@@ -19,12 +19,12 @@ let
         now as datetime
     ) as record => 
         let
-            // the daylight saving time starts on the last Sunday of March
+            // the daylight saving time starts on the last Sunday of March at 1am UTC
             LastDayOfMarch = #date(Date.Year(now), 3, 31),
-            StartOfDaylightSavingTime = Date.AddDays(LastDayOfMarch, -Date.DayOfWeek(LastDayOfMarch)) & #time(2, 0, 0),
-            // the daylight saving time ends on the last Sunday in October
+            StartOfDaylightSavingTime = Date.AddDays(LastDayOfMarch, -Date.DayOfWeek(LastDayOfMarch)) & #time(1, 0, 0),
+            // the daylight saving time ends on the last Sunday in October at 1am UTC
             LastDayOfOctober = #date(Date.Year(now), 10, 31),
-            EndOfDaylightSavingTime = Date.AddDays(LastDayOfOctober, -Date.DayOfWeek(LastDayOfOctober)) & #time(3, 0, 0)
+            EndOfDaylightSavingTime = Date.AddDays(LastDayOfOctober, -Date.DayOfWeek(LastDayOfOctober)) & #time(1, 0, 0)
         in
             [From = StartOfDaylightSavingTime, To = EndOfDaylightSavingTime],
 
