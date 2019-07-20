@@ -1,80 +1,76 @@
-(
-    StandardOffset as duration, 
-    DaylightSavingTimeOffset as duration
-) as table =>
-    let
-        /**********************************************************
-         * 
-         * Author: Michal Dvorak WITH(NOLOCK)
-         * Since: 20.07.2019
-         * Twitter: @nolockcz
-         *
-         * Source code: https://github.com/nolockcz/PowerQuery
-         * Usage: 
-         *   = fnLastLoadTimestamp(#duration(0,1,0,0), #duration(0,2,0,0)) for standard offset +01:00 and DST offset +02:00
-         *   (if you use this code out of EU, modify the function fnDaylightSavingTimePeriod)
-         *
-         *********************************************************/
+let
+    /**********************************************************
+        * 
+        * Author: Michal Dvorak WITH(NOLOCK)
+        * Since: 20.07.2019
+        * Twitter: @nolockcz
+        *
+        * Source code: https://github.com/nolockcz/PowerQuery
+        *
+        *********************************************************/
 
-        // get start and end of daylight saving time
-        // this code implements the rules of EU counties
-        // if it doesn't fill your expectations, visit https://en.wikipedia.org/wiki/Daylight_saving_time_by_country and implement your own function
-        fnDaylightSavingTimePeriod = (
-            now as datetime
-        ) as record => 
-            let
-                // the daylight saving time starts on the last Sunday of March
-                LastDayOfMarch = #date(Date.Year(now), 3, 31),
-                StartOfDaylightSavingTime = Date.AddDays(LastDayOfMarch, -Date.DayOfWeek(LastDayOfMarch)) & #time(2, 0, 0),
-                // the daylight saving time ends on the last Sunday in October
-                LastDayOfOctober = #date(Date.Year(now), 10, 31),
-                EndOfDaylightSavingTime = Date.AddDays(LastDayOfOctober, -Date.DayOfWeek(LastDayOfOctober)) & #time(3, 0, 0)
-            in
-                [From = StartOfDaylightSavingTime, To = EndOfDaylightSavingTime],
+    StandardOffset = #duration(0, 1, 0, 0),
+    DaylightSavingTimeOffset = #duration(0, 2, 0, 0),
 
-        // get a timestamp in UTC (with offset 00:00 all year long)
-        UtcNow = DateTimeZone.UtcNow(),
-        // convert UTC datetime with offset to datetime
-        UtcNowWithoutZone = DateTimeZone.RemoveZone(UtcNow),
+    // get start and end of daylight saving time
+    // this code implements the rules of EU counties
+    // if it doesn't fill your expectations, visit https://en.wikipedia.org/wiki/Daylight_saving_time_by_country and implement your own function
+    fnDaylightSavingTimePeriod = (
+        now as datetime
+    ) as record => 
+        let
+            // the daylight saving time starts on the last Sunday of March
+            LastDayOfMarch = #date(Date.Year(now), 3, 31),
+            StartOfDaylightSavingTime = Date.AddDays(LastDayOfMarch, -Date.DayOfWeek(LastDayOfMarch)) & #time(2, 0, 0),
+            // the daylight saving time ends on the last Sunday in October
+            LastDayOfOctober = #date(Date.Year(now), 10, 31),
+            EndOfDaylightSavingTime = Date.AddDays(LastDayOfOctober, -Date.DayOfWeek(LastDayOfOctober)) & #time(3, 0, 0)
+        in
+            [From = StartOfDaylightSavingTime, To = EndOfDaylightSavingTime],
 
-        // get summer time period
-        DaylightSavingTimePeriod = fnDaylightSavingTimePeriod(UtcNowWithoutZone),
+    // get a timestamp in UTC (with offset 00:00 all year long)
+    UtcNow = DateTimeZone.UtcNow(),
+    // convert UTC datetime with offset to datetime
+    UtcNowWithoutZone = DateTimeZone.RemoveZone(UtcNow),
 
-        // convert UTC time to the local time with respect to current offset
-        LocalTimeWithOffset = 
-            if UtcNowWithoutZone >= DaylightSavingTimePeriod[From] and UtcNowWithoutZone <= DaylightSavingTimePeriod[To] then
-                DateTimeZone.SwitchZone(
-                    UtcNow, 
-                    Duration.Hours(DaylightSavingTimeOffset), 
-                    Duration.Minutes(DaylightSavingTimeOffset)
-                )
-            else
-                DateTimeZone.SwitchZone(
-                    UtcNow, 
-                    Duration.Hours(StandardOffset), 
-                    Duration.Minutes(StandardOffset)
-                ),
-        
-        // current date time without offset
-        LocalTime = DateTimeZone.RemoveZone(LocalTimeWithOffset),
+    // get daylight saving time period
+    DaylightSavingTimePeriod = fnDaylightSavingTimePeriod(UtcNowWithoutZone),
 
-        // result table
-        Result = #table(
-            type table
-            [
-                #"UTC timestamp" = datetime, 
-                #"UTC date" = date,
-                #"Local timestamp with offset" = datetimezone,
-                #"Local timestamp without offset" = datetime
-            ], 
+    // convert UTC time to the local time with respect to current offset
+    LocalTimeWithOffset = 
+        if UtcNowWithoutZone >= DaylightSavingTimePeriod[From] and UtcNowWithoutZone <= DaylightSavingTimePeriod[To] then
+            DateTimeZone.SwitchZone(
+                UtcNow, 
+                Duration.Hours(DaylightSavingTimeOffset), 
+                Duration.Minutes(DaylightSavingTimeOffset)
+            )
+        else
+            DateTimeZone.SwitchZone(
+                UtcNow, 
+                Duration.Hours(StandardOffset), 
+                Duration.Minutes(StandardOffset)
+            ),
+    
+    // current date time without offset
+    LocalTime = DateTimeZone.RemoveZone(LocalTimeWithOffset),
+
+    // result table
+    Result = #table(
+        type table
+        [
+            #"UTC timestamp" = datetime, 
+            #"UTC date" = date,
+            #"Local timestamp with offset" = datetimezone,
+            #"Local timestamp without offset" = datetime
+        ], 
+        {
             {
-                {
-                UtcNowWithoutZone,
-                DateTime.Date(UtcNowWithoutZone),
-                LocalTimeWithOffset,
-                LocalTime
-                }
+            UtcNowWithoutZone,
+            DateTime.Date(UtcNowWithoutZone),
+            LocalTimeWithOffset,
+            LocalTime
             }
-        )
-    in
-        Result
+        }
+    )
+in
+    Result
