@@ -1,0 +1,74 @@
+let
+       /**********************************************************
+        * 
+        * Author: Michal Dvorak WITH(NOLOCK)
+        * Since: 02.08.2019
+        * Twitter: @nolockcz
+        *
+        * Source code: https://github.com/nolockcz/PowerQuery
+        *
+        *********************************************************/    
+
+    /***** Table with one minute column *****/
+    NumberOfMinutes = 24 * 60,
+    ListOfMinutes = List.Times(#time(0, 0, 0), NumberOfMinutes, #duration(0, 0, 1, 0)),
+    MinutesAsTable = Table.FromList(ListOfMinutes, Splitter.SplitByNothing(), {"Time"}, null, ExtraValues.Error),
+    MinuteColumnAsTime = Table.TransformColumnTypes(MinutesAsTable,{{"Time", type time}}),
+
+    /***** Index column *****/
+    Index = Table.AddColumn(MinuteColumnAsTime, "Index", each Time.Hour([Time]) * 100 + Time.Minute([Time]), Int32.Type),
+
+    /***** Hour and minute *****/
+    Hour = Table.AddColumn(Index, "Hour", each Time.Hour([Time]), Int32.Type),
+    Minute = Table.AddColumn(Hour, "Minute", each Time.Minute([Time]), Int32.Type),
+
+    /***** Round down minutes by interval value *****/
+    fnTimeRoundDown = (currentTime as time, interval as number) as time => 
+        let
+            currentHour = Time.Hour(currentTime),
+            currentMinute = Time.Minute(currentTime),
+            result = #time(currentHour, currentMinute - Number.Mod(currentMinute, interval), 0)
+        in
+            result,
+
+    FiveMinutes = Table.AddColumn(Minute, "FiveMinutes", each fnTimeRoundDown([Time], 5), type time),
+    TenMinutes = Table.AddColumn(FiveMinutes, "TenMinutes", each fnTimeRoundDown([Time], 10), type time),
+    FifteenMinutes = Table.AddColumn(TenMinutes, "FifteenMinutes", each fnTimeRoundDown([Time], 15), type time),
+    ThirtyMinutes = Table.AddColumn(FifteenMinutes, "ThirtyMinutes", each fnTimeRoundDown([Time], 30), type time),
+    OneHour = Table.AddColumn(ThirtyMinutes, "OneHour", each fnTimeRoundDown([Time], 60), type time),
+
+    /***** Generates a text from a time interval *****/
+    fnTimeToText = (currentTime as time, countOfMinutes as number) as text =>
+        let 
+            from = currentTime,
+            to = currentTime + #duration(0, 0, countOfMinutes, 0),
+            result = Time.ToText(from) & " - " & Time.ToText(to)
+        in
+            result,
+
+    FiveMinutesText = Table.AddColumn(OneHour, "FiveMinutesInterval", each fnTimeToText([FiveMinutes], 5), type text),
+    TenMinutesText = Table.AddColumn(FiveMinutesText, "TenMinutesInterval", each fnTimeToText([TenMinutes], 10), type text),
+    FifteenMinutesText = Table.AddColumn(TenMinutesText, "FifteenMinutesInterval", each fnTimeToText([FifteenMinutes], 15), type text),
+    ThirtyMinutesText = Table.AddColumn(FifteenMinutesText, "ThirtyMinutesInterval", each fnTimeToText([ThirtyMinutes], 30), type text),
+    OneHourText = Table.AddColumn(ThirtyMinutesText, "OneHourInterval", each fnTimeToText([OneHour], 60), type text),
+    
+    /***** Translation of columns to German *****/
+    ColumnTranslation = Table.RenameColumns(
+        OneHourText,
+        {
+            {"Time", "Zeit"}, 
+            {"Hour", "Stunde"}, 
+            {"FiveMinutes", "5 Minuten"}, 
+            {"TenMinutes", "10 Minuten"}, 
+            {"FifteenMinutes", "15 Minuten"}, 
+            {"ThirtyMinutes", "30 Minuten"}, 
+            {"OneHour", "1 Stunde"}, 
+            {"FiveMinutesInterval", "5 Minuten Intervall"}, 
+            {"TenMinutesInterval", "10 Minuten Intervall"}, 
+            {"FifteenMinutesInterval", "15 Minuten Intervall"}, 
+            {"ThirtyMinutesInterval", "30 Minuten Intervall"}, 
+            {"OneHourInterval", "1 Stunde Intervall"}
+        }
+    )
+in
+    ColumnTranslation

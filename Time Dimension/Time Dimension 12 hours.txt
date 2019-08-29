@@ -1,0 +1,82 @@
+let
+       /**********************************************************
+        * 
+        * Author: Michal Dvorak WITH(NOLOCK)
+        * Since: 02.08.2019
+        * Twitter: @nolockcz
+        *
+        * Source code: https://github.com/nolockcz/PowerQuery
+        *
+        *********************************************************/ 
+
+    /***** Table with one minute column *****/
+    NumberOfMinutes = 24 * 60,
+    ListOfMinutes = List.Times(#time(0, 0, 0), NumberOfMinutes, #duration(0, 0, 1, 0)),
+    MinutesAsTable = Table.FromList(ListOfMinutes, Splitter.SplitByNothing(), {"Time"}, null, ExtraValues.Error),
+    MinuteColumnAsTime = Table.TransformColumnTypes(MinutesAsTable,{{"Time", type time}}),
+
+    /***** Index column *****/
+    Index = Table.AddColumn(MinuteColumnAsTime, "Index", each Time.Hour([Time]) * 100 + Time.Minute([Time]), Int32.Type),
+
+    Meridiem = Table.AddColumn(Index, "Meridiem", each if Time.Hour([Time]) < 12 then "am" else "pm", type text),
+
+    /***** Hour and minute *****/
+    Hour24 = Table.AddColumn(Meridiem, "Hour24", each Time.Hour([Time]), Int32.Type),
+    Hour12 = Table.AddColumn(Hour24, "Hour12", each if [Hour24] = 0 then 12 else if [Hour24] <= 12 then [Hour24] else [Hour24] - 12, Int32.Type),
+    Minute = Table.AddColumn(Hour12, "Minute", each Time.Minute([Time]), Int32.Type),
+
+    /***** Round down minutes by interval value *****/
+    fnTimeRoundDown = (currentTime as time, interval as number) as time => 
+        let
+            currentHour = Time.Hour(currentTime),
+            currentMinute = Time.Minute(currentTime),
+            result = #time(currentHour, currentMinute - Number.Mod(currentMinute, interval), 0)
+        in
+            result,
+
+    FiveMinutes = Table.AddColumn(Minute, "FiveMinutes", each fnTimeRoundDown([Time], 5), type time),
+    TenMinutes = Table.AddColumn(FiveMinutes, "TenMinutes", each fnTimeRoundDown([Time], 10), type time),
+    FifteenMinutes = Table.AddColumn(TenMinutes, "FifteenMinutes", each fnTimeRoundDown([Time], 15), type time),
+    ThirtyMinutes = Table.AddColumn(FifteenMinutes, "ThirtyMinutes", each fnTimeRoundDown([Time], 30), type time),
+    OneHour = Table.AddColumn(ThirtyMinutes, "OneHour", each fnTimeRoundDown([Time], 60), type time),
+
+    /***** Generates a text from a time interval *****/
+    fnTimeToText = (currentTime as time, countOfMinutes as number) as text =>
+        let 
+            from = currentTime,
+            to = currentTime + #duration(0, 0, countOfMinutes, 0),
+            fromMeridiem = if Time.Hour(from) < 12 then "am" else "pm",
+            toMeridiem = if Time.Hour(to) < 12 then "am" else "pm",
+            result = Time.ToText(from, "h:mm") & (if fromMeridiem = toMeridiem then "" else " " & fromMeridiem) & " - " & Time.ToText(to, "h:mm") & " " & toMeridiem
+        in
+            result,
+
+    FiveMinutesText = Table.AddColumn(OneHour, "FiveMinutesInterval", each fnTimeToText([FiveMinutes], 5), type text),
+    TenMinutesText = Table.AddColumn(FiveMinutesText, "TenMinutesInterval", each fnTimeToText([TenMinutes], 10), type text),
+    FifteenMinutesText = Table.AddColumn(TenMinutesText, "FifteenMinutesInterval", each fnTimeToText([FifteenMinutes], 15), type text),
+    ThirtyMinutesText = Table.AddColumn(FifteenMinutesText, "ThirtyMinutesInterval", each fnTimeToText([ThirtyMinutes], 30), type text),
+    OneHourText = Table.AddColumn(ThirtyMinutesText, "OneHourInterval", each fnTimeToText([OneHour], 60), type text),
+
+    /***** Translation of columns to English *****/
+    ColumnTranslation = Table.RenameColumns(
+        OneHourText,
+        {
+            {"Time", "Time"}, 
+            {"Meridiem", "Meridiem"},
+            {"Hour24", "Hour 24h"}, 
+            {"Hour12", "Hour 12h"}, 
+            {"Minute", "Minute"}, 
+            {"FiveMinutes", "5 Minutes"}, 
+            {"TenMinutes", "10 Minutes"}, 
+            {"FifteenMinutes", "15 Minutes"}, 
+            {"ThirtyMinutes", "30 Minutes"}, 
+            {"OneHour", "1 Hour"}, 
+            {"FiveMinutesInterval", "5 Minutes Interval"}, 
+            {"TenMinutesInterval", "10 Minutes Interval"}, 
+            {"FifteenMinutesInterval", "15 Minutes Interval"}, 
+            {"ThirtyMinutesInterval", "30 Minutes Interval"}, 
+            {"OneHourInterval", "1 Hour Interval"}
+        }
+    )
+in
+    ColumnTranslation
