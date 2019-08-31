@@ -8,6 +8,10 @@ let
         * Source code: https://github.com/nolockcz/PowerQuery
         *
         *********************************************************/ 
+    
+    /***** Format of the meridiem used in the code *****/
+    AmFormat = "am",
+    PmFormat = "pm",
 
     /***** Table with one minute column *****/
     NumberOfMinutes = 24 * 60,
@@ -18,7 +22,7 @@ let
     /***** Index column *****/
     Index = Table.AddColumn(MinuteColumnAsTime, "Index", each Time.Hour([Time]) * 100 + Time.Minute([Time]), Int32.Type),
 
-    Meridiem = Table.AddColumn(Index, "Meridiem", each if Time.Hour([Time]) < 12 then "am" else "pm", type text),
+    Meridiem = Table.AddColumn(Index, "Meridiem", each if Time.Hour([Time]) < 12 then AmFormat else PmFormat, type text),
 
     /***** Hour and minute *****/
     Hour24 = Table.AddColumn(Meridiem, "Hour24", each Time.Hour([Time]), Int32.Type),
@@ -45,9 +49,13 @@ let
         let 
             from = currentTime,
             to = currentTime + #duration(0, 0, countOfMinutes, 0),
-            fromMeridiem = if Time.Hour(from) < 12 then "am" else "pm",
-            toMeridiem = if Time.Hour(to) < 12 then "am" else "pm",
-            result = Time.ToText(from, "h:mm") & (if fromMeridiem = toMeridiem then "" else " " & fromMeridiem) & " - " & Time.ToText(to, "h:mm") & " " & toMeridiem
+            fromMeridiem = if Time.Hour(from) < 12 then amFormat else PmFormat,
+            toMeridiem = if Time.Hour(to) < 12 then AmFormat else PmFormat,
+            result = 
+		Time.ToText(from, "h:mm") & 
+                (if fromMeridiem = toMeridiem then "" else " " & fromMeridiem) & 
+                " - " & 
+                Time.ToText(to, "h:mm") & " " & toMeridiem
         in
             result,
 
