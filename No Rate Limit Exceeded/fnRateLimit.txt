@@ -1,0 +1,133 @@
+let
+    fn = (
+        fnSendRequest as function,
+        idList as list,
+        rateLimitCount as number,
+        rateLimitDuration as duration
+    ) as table =>
+        let 
+            // get how long the next request should wait to stay unter a rate limit
+            fnGetWaitDuration = (
+                requestSentTimestampList as list,
+                rateLimitCount as number,
+                rateLimitDuration as duration
+            ) as duration =>
+                if List.Count(requestSentTimestampList) < rateLimitCount then
+                    #duration(0, 0, 0, 0)
+                else if (rateLimitDuration + List.Min(requestSentTimestampList)) < DateTimeZone.UtcNow() then
+                    #duration(0, 0, 0, 0)
+                else
+                    (rateLimitDuration + List.Min(requestSentTimestampList)) - DateTimeZone.UtcNow(),
+
+            // remove timestamps which are out of rate limit range
+            fnRemoveOldTimestamps = (
+                requestSentTimestampList as list,
+                rateLimitDuration as duration
+            ) as list =>
+                List.Select(requestSentTimestampList, each _ > DateTimeZone.UtcNow() - rateLimitDuration),
+
+            // invoke second after first
+            fnInvokeSecondAfterFirst = (first as any, second as any, colNames as list) =>
+                let
+                    A = first,
+                    B = if A = null then error "" else second
+                in
+                    Expression.Evaluate("[" & colNames{0} & "=A, " & colNames{1} & "= B]", [A=A, B=B]),
+
+            // for each ID from idList call a function with respect to a rate limit
+            ResultRecordList = List.Accumulate(
+                // initial list of IDs
+                idList,
+                // initial state
+                [
+                    RequestSentTimestampList = {}, 
+                    ResultRecordList = {}, 
+                    Debug = {}
+                ],
+                // foreach
+                (state, id) =>
+                    let
+                        // get how long the next request should wait to stay unter a rate limit
+                        WaitDuration = fnGetWaitDuration(state[RequestSentTimestampList], rateLimitCount, rateLimitDuration),
+                        // call function after the waiting duration
+                        InvokeAfterWaitDuration = Function.InvokeAfter(
+                            () => fnInvokeSecondAfterFirst(fnSendRequest(id), DateTimeZone.UtcNow(), {"FnResult", "InvokationTimestamp"}), 
+                            WaitDuration
+                        ),
+                        // create the next state of List.Accumulate
+                        NewState = 
+                            [
+                                // list of timestamps when a request has been sent
+                                RequestSentTimestampList = fnRemoveOldTimestamps(state[RequestSentTimestampList], rateLimitDuration) & {InvokeAfterWaitDuration[InvokationTimestamp]},
+                                // list of results
+                                ResultRecordList = state[ResultRecordList] & {InvokeAfterWaitDuration[FnResult]},
+                                // debug
+                                Debug = state[Debug] & 
+                                    {
+                                        [
+                                            InvocationTimestamp = InvokeAfterWaitDuration[InvokationTimestamp], 
+                                            QueryLenght = List.Count(RequestSentTimestampList), 
+                                            WaitBeforeInvokeDuration = WaitDuration
+                                        ]
+                                    }
+                            ]
+                    in
+                        NewState
+            ),
+            ResultTable = Table.FromColumns(
+                {
+                    idList,
+                    ResultRecordList[ResultRecordList], 
+                    ResultRecordList[Debug]
+                }, 
+                {
+                    "ID",
+                    "Result Record", 
+                    "Debug"
+                }
+            )
+        in 
+            ResultTable,
+
+        Documentation = 
+        [
+            Documentation.Name = "fnRateLimit",
+            Documentation.Description = "Invoke a function on every ID with respect to a rate limit defined by count of request in a time period.",
+            Documentation.Examples = 
+            {
+                [
+                    Description = "Simple example with a simulated delay.",
+                    Code = "fnRateLimit(
+        (y) => Function.InvokeAfter(() => y * y, #duration(0,0,0,1.5)),
+        {1..10}, 
+        4, 
+        #duration(0, 0, 0, 7)
+    )",
+                    Result = ""
+                ],
+                [
+                    Description = "Simple example with a simulated delay with some debug data.",
+                    Code = "let
+    Test = fnRateLimit(
+        (y) => Function.InvokeAfter(() => y * y, #duration(0,0,0,1.5)),
+        {1..10}, 
+        4, 
+        #duration(0, 0, 0, 7)
+    ),
+    ExpandedDebug = Table.ExpandRecordColumn(
+        Test, 
+        ""Debug"", 
+        {""InvocationTimestamp"", ""QueryLenght"", ""WaitBeforeInvokeDuration""}, 
+        {""Debug.InvocationTimestamp"", ""Debug.QueryLenght"", ""Debug.WaitBeforeInvokeDuration""}
+    )
+in
+    ExpandedDebug",
+                    Result = ""
+                ]
+            }
+        ]
+in
+    Value.ReplaceType(
+        fn, 
+        Value.ReplaceMetadata(Value.Type(fn), Documentation)
+    )
