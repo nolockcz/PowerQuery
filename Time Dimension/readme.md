@@ -1,3 +1,5 @@
+# Time Dimension in Power Query
+
 I have developed 2 different time dimensions in Power Query. One is in the 24-hour and the other in the 12-hour format.
 
 A time dimension is very simple in comparison to a [date dimension](https://github.com/nolockcz/PowerQuery/tree/master/Date%20Dimension). A day has 24 hours, an hour 60 minutes, and a minute - 60 seconds. I don’t care about the [leap second](https://en.wikipedia.org/wiki/Leap_second).
