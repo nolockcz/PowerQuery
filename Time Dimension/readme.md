@@ -10,7 +10,7 @@ Hmm, seconds. Do we really need them in a time dimension? I don’t think so. A 
 
 Let’s start with the code. At the beginning we create a table containing every minute of a day. For every minute we extract its hour and minute. Till now nothing spectacular.
 
-```
+```m
 /***** Table with one minute column *****/
 NumberOfMinutes = 24 * 60,
 ListOfMinutes = List.Times(#time(0, 0, 0), NumberOfMinutes, #duration(0, 0, 1, 0)),
@@ -30,7 +30,7 @@ The code generates a table with four columns:
 
 Next step will be columns which are grouped by intervals like 5, 10, 15, 30, and 60 minutes. To achieve that we use a basic custom function, which rounds down minutes to the last fold of an interval.
  
-```
+```m
 /***** Round down minutes by interval value *****/
 fnTimeRoundDown = (currentTime as time, interval as number) as time => 
     let
@@ -52,7 +52,7 @@ A subset looks like:
 They are useful, but what our customers expect in their colorful visuals are intervals like from 10:00 to 10:15, from 10:15 to 10:30 and so on. For that we need another custom function.
 
  
-```
+```m
 /***** Generates a text from a time interval *****/
 fnTimeToText = (currentTime as time, countOfMinutes as number) as text =>
     let 
@@ -84,7 +84,7 @@ First of all, you can choose what format the meridiem should have. According to 
 
 The rest of the code is almost the same as the 24-hour format. I am not sure how am/pm is used in intervals if the start is before midday, but the end is after midday. And the same is around midnight. I have tried to find out the correct form on the internet but without success. I’ve decided to write both meridians if they are different like 11:45 am – 12:00 pm in comparison to 12:00 – 12:15 pm. If you expect another format, modify the code ;)
 
-```
+```m
 /***** Generates a text from a time interval *****/
 fnTimeToText = (currentTime as time, countOfMinutes as number) as text =>
     let 

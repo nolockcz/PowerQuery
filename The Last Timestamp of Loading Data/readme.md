@@ -21,7 +21,7 @@ Well, there isn’t. We have to write our own code for this purpose.
 ## Power Query (online version)
 The simplest solution is to use a webservice which responses with local time according to your time zone. There are plenty of them on the internet, I’ve used http://worldtimeapi.org/.
 
-```
+```m
 let
     // get current datetimezone from web API
     DateTimeApiResult = Json.Document(Web.Contents("http://worldtimeapi.org/api/timezone/Europe/Berlin")),
@@ -58,14 +58,14 @@ The next solution will be an offline one. It is based on the UTC timestamp becau
 
 The code is simple and if you think it is too long to read, don’t panic, half of it are comments ;)
 
-```
+```m
 let
     StandardOffset = #duration(0, 1, 0, 0),
     DaylightSavingTimeOffset = #duration(0, 2, 0, 0),
 
     // get start and end of daylight saving time
     // this code implements the rules of EU counties
-    // if it doesn't fill your expectations, visit https://en.wikipedia.org/wiki/Daylight_saving_time_by_country and implement your own function
+    // if it does not fill your expectations, visit https://en.wikipedia.org/wiki/Daylight_saving_time_by_country and implement your own function
     fnDaylightSavingTimePeriod = (
         now as datetime
     ) as record => 
@@ -132,7 +132,7 @@ The only advanced thing is calculating the start and the end date of the DST (da
  
 
 The result is a table with one row which contains following columns:
-```
+```m
 #"UTC timestamp" = datetime, 
 #"UTC date" = date,
 #"Local timestamp with offset" = datetimezone,

@@ -27,11 +27,11 @@ And finally, the holy grail - holidays! In many business use cases, it is crucia
 How to modify the list of holidays? There is a function called *fnGetAllHolidaysOfAYear* which generates all holidays in a year. In Germany, most of them are based on the Easter Sunday and that is also my starting point. Then I generate a list *CurrentYearHolidaysList* which contains the definition of all holidays in one year.
 
 Example New Year and Easter Monday:
-```
+```m
 // NewYear = always January 1st
 [Date = #date(year, 1, 1), HolidayName = "Neujahr"],
 ```
-```
+```m
 // EasterMonday = 1 day after Easter Sunday
 [Date = Date.AddDays(EasterSunday, 1), HolidayName = "Ostermontag"],
 ```
