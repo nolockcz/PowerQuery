@@ -1,0 +1,63 @@
+(UTCTimestampAny as any) as nullable datetime =>
+    let 
+        /*
+        * The record defines when the daylight saving time period starts and ends
+        * and what the standard and daylight saving time offsets are.
+        */
+        TimeZoneConfiguration = [
+            // standard offset
+            StandardOffset = #duration(0, 1, 0, 0),            
+            // the day light saving time offset
+            DaylightSavingTimeOffset = #duration(0, 2, 0, 0),
+
+            /* 
+            * Get start and end of daylight saving time.
+            * This code implements the rules of EU counties. If it doesn't fill your expectations, 
+            * go to https://en.wikipedia.org/wiki/Daylight_saving_time_by_country and modify the code below.
+            */
+            fnDaylightSavingTimePeriod = (
+                timestamp as datetime
+            ) as record => 
+                let
+                    // the daylight saving time starts on the last Sunday of March at 1am UTC
+                    LastDayOfMarch = #date(Date.Year(timestamp), 3, 31),
+                    StartOfDaylightSavingTime = Date.AddDays(LastDayOfMarch, -Date.DayOfWeek(LastDayOfMarch, Day.Sunday)) & #time(1, 0, 0),
+                    
+                    // the daylight saving time ends on the last Sunday of October at 1am UTC
+                    LastDayOfOctober = #date(Date.Year(timestamp), 10, 31),
+                    EndOfDaylightSavingTime = Date.AddDays(LastDayOfOctober, -Date.DayOfWeek(LastDayOfOctober, Day.Sunday)) & #time(1, 0, 0),
+                    
+                    Result = 
+                        [
+                            From = StartOfDaylightSavingTime, 
+                            To = EndOfDaylightSavingTime
+                        ]
+                in
+                    Result
+        ],
+
+        DateTimeUTC = 
+            if Value.Is(UTCTimestampAny, type datetime) then
+                UTCTimestampAny
+            else if Value.Is(UTCTimestampAny, type datetimezone) then
+                DateTimeZone.RemoveZone(UTCTimestampAny)
+            else
+                error Error.Record(
+                    "Invalid data type of parameter UTCTimestampAny",
+                    null,
+                    "Allowed data types are 'datetime' and 'datetimezone'."
+                ),
+
+        // get daylight saving time period
+        DaylightSavingTimePeriod = TimeZoneConfiguration[fnDaylightSavingTimePeriod](DateTimeUTC),
+
+        // convert UTC to local time defined by an offset
+        LocalTime = 
+            if DateTimeUTC = null then
+                null
+            else if DateTimeUTC >= DaylightSavingTimePeriod[From] and DateTimeUTC < DaylightSavingTimePeriod[To] then
+                DateTimeUTC + TimeZoneConfiguration[DaylightSavingTimeOffset]
+            else
+                DateTimeUTC + TimeZoneConfiguration[StandardOffset]
+    in
+        LocalTime
