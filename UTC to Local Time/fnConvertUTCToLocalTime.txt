@@ -1,4 +1,4 @@
-(UTCTimestampAny as any) as nullable datetime =>
+(UTCTimestamp as any) as nullable datetime =>
     let 
         /*
         * The record defines when the daylight saving time period starts and ends
@@ -37,13 +37,13 @@
         ],
 
         DateTimeUTC = 
-            if Value.Is(UTCTimestampAny, type datetime) then
-                UTCTimestampAny
-            else if Value.Is(UTCTimestampAny, type datetimezone) then
-                DateTimeZone.RemoveZone(UTCTimestampAny)
+            if Value.Is(UTCTimestamp, type nullable datetime) then
+                UTCTimestamp
+            else if Value.Is(UTCTimestamp, type nullable datetimezone) then
+                DateTimeZone.RemoveZone(UTCTimestamp)
             else
                 error Error.Record(
-                    "Invalid data type of parameter UTCTimestampAny",
+                    "Invalid data type of parameter UTCTimestamp",
                     null,
                     "Allowed data types are 'datetime' and 'datetimezone'."
                 ),
