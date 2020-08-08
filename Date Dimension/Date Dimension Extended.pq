@@ -3,13 +3,24 @@ let
         Date Dimension Extended.pq
         Author: Michal Dvorak (Nolock)
         Created: June 2019
+        Updated:
+            August 2020
+                - Added MonthNameAbbreviatedYear (i.e. Jan 2020)
+                - Added FiscalMonth and FiscalYearMonth
+                - Added Is13MonthsBackwards
+                - Bugfix for the date 1.5.2008 (two holidays are celebrated on this date which produces 2 rows for one day)
     *****/
 
     /***** Params *****/
     // Start year of date dim table
     StartYear = 2000,
     // End year of date dim table
-    EndYear = 2039,   
+    EndYear = 2039,
+    // Is a holiday on the Christmas Eve
+    IsChristmasEveHoliday = true,
+    // Is a holiday on the New Year's Eve
+    IsNewYearsEveHoliday = true,
+    /***** End of Params *****/
 
     /***** Table with one date column *****/
     StartDate = #date(StartYear, 1, 1),
@@ -31,7 +42,8 @@ let
     MonthName = Table.AddColumn(YearMonth, "MonthName", each Date.ToText([Date], "MMMM"), type text),
     MonthNameAbbreviated = Table.AddColumn(MonthName, "MonthNameAbbreviated", each Date.ToText([Date], "MMM"), type text),
     MonthNameYear = Table.AddColumn(MonthNameAbbreviated, "MonthNameYear", each Date.ToText([Date], "MMMM yyyy"), type text),
-    DayOfMonth = Table.AddColumn(MonthNameYear, "DayOfMonth", each Date.Day([Date]), Int32.Type),
+    MonthNameAbbreviatedYear = Table.AddColumn(MonthNameYear, "MonthNameAbbreviatedYear", each Date.ToText([Date], "MMM yyyy"), type text),
+    DayOfMonth = Table.AddColumn(MonthNameAbbreviatedYear, "DayOfMonth", each Date.Day([Date]), Int32.Type),
     DayOfYear = Table.AddColumn(DayOfMonth, "DayOfYear", each Date.DayOfYear([Date]), Int32.Type),
     WeekOfYear = Table.AddColumn(DayOfYear, "WeekOfYear", each Date.WeekOfYear([Date]), Int32.Type),
     DayOfWeek = Table.AddColumn(WeekOfYear, "DayOfWeek", each Date.DayOfWeek([Date], Day.Monday) + 1, Int32.Type),
@@ -65,11 +77,16 @@ let
     IsoYearWeek = Table.AddColumn(DayOfWeekNameAbbreviated, "IsoYearWeek", each IsoYearWeekFunc([Date]), Int32.Type),
     IsoYearWeekIndex = Table.AddColumn(IsoYearWeek, "IsoYearWeekIndex", each Number.RoundDown([IsoYearWeek] / 100) * 53 + Number.Mod([IsoYearWeek], 100), Int32.Type),
 
+    FiscalMonth = Table.AddColumn(IsoYearWeekIndex, "FiscalMonth", each if [Month] >= 7 then [Month] - 6 else [Month] + 6, type number),
+    FiscalYearMonth = Table.AddColumn(FiscalMonth, "FiscalYearMonth", each Text.From([Year] * 100 + [FiscalMonth]), type text),
+
     /***** Years, Months, Weeks, and Days backwards *****/
-    YearBackwards = Table.AddColumn(IsoYearWeekIndex, "YearBackwards", each Date.Year(DateTime.LocalNow()) - [Year], Int32.Type),
+    YearBackwards = Table.AddColumn(FiscalYearMonth, "YearBackwards", each Date.Year(DateTime.LocalNow()) - [Year], Int32.Type),
     QuartersBackwards = Table.AddColumn(YearBackwards, "QuartersBackwards", each (Date.Year(DateTime.LocalNow()) * 4 + Date.QuarterOfYear(DateTime.LocalNow())) - ([Year] * 4 + Date.QuarterOfYear([Date])), Int32.Type),    
     MonthsBackwards = Table.AddColumn(QuartersBackwards, "MonthsBackwards", each (Date.Year(DateTime.LocalNow()) * 12 + Date.Month(DateTime.LocalNow())) - ([Year] * 12 + [Month]), Int32.Type),    
-    TempYearWeek = Table.AddColumn(MonthsBackwards, "TempYearWeek", each [Year]*100+[WeekOfYear]),    
+    Is13MonthsBackwards = Table.AddColumn(MonthsBackwards, "Is13MonthsBackwards", each [MonthsBackwards] >= 1 and [MonthsBackwards] <= 13, type logical),
+
+    TempYearWeek = Table.AddColumn(Is13MonthsBackwards, "TempYearWeek", each [Year]*100+[WeekOfYear]),    
     WeekCountHelpTable = 
         // create a date table with a week counter
         let                        
@@ -89,9 +106,8 @@ let
     RemoveTempColumns = Table.RemoveColumns(WeeksBackwards,{"TempYearWeek", "TempWeekCountHelpTable_WeekCounter", "TempWeekCountHelpTable_IsCurrentWeek", "TempWeekCounterOfToday"}),
     DaysBackwards = Table.AddColumn(RemoveTempColumns, "DaysBackwards", each Duration.Days(Duration.From(DateTime.Date(DateTime.LocalNow()) - [Date])), Int32.Type),
 
-    /***** Holidays *****/
-    // get a list of years and all holidays in that years
-    fnGetAllHolidaysOfAYear = (year as number) as list => 
+    // get a record containing holiday name, isWeekend, and isWorkingDay for a date
+    HolidayFunc = (dt as date) as record => 
         let 
             // get a date of Easter Sunday (Source: https://en.wikipedia.org/wiki/Computus)
             EasterSundayFunc = (year as number) as date =>
@@ -114,82 +130,127 @@ let
                 in
                     dt,
 
-            EasterSunday = EasterSundayFunc(year),
+            EasterSunday = EasterSundayFunc(Date.Year(dt)),            
 
-            CurrentYearHolidaysList = {
-                // NewYear = always January 1st
-                [Date = #date(year, 1, 1), HolidayName = "Neujahr"],
-                
-                // Epiphany = always January 6th
-                [Date = #date(year, 1, 6), HolidayName = "Heilige Drei Könige"],
+            // NewYear = always January 1st
+            NewYear = 
+                if Date.Month(dt) = 1 and Date.Day(dt) = 1 
+                then [HolidayName = "Neujahr", IsHoliday = true]
+                else null,
+            // Epiphany = always January 6th
+            Epiphany = 
+                if Date.Month(dt) = 1 and Date.Day(dt) = 6 
+                then [HolidayName = "Heilige Drei Könige", IsHoliday = true]
+                else null,
 
-                // GoodFriday = 2 days before Easter Sunday 
-                [Date = Date.AddDays(EasterSunday, -2), HolidayName = "Karfreitag"],
+            // GoodFriday = 2 days before Easter Sunday
+            GoodFriday = 
+                if dt = Date.AddDays(EasterSunday, -2)
+                then [HolidayName = "Karfreitag", IsHoliday = true]
+                else null,
 
-                // EasterMonday = 1 day after Easter Sunday
-                [Date = Date.AddDays(EasterSunday, 1), HolidayName = "Ostermontag"],
+            // EasterMonday = 1 day after Easter Sunday
+            EasterMonday  = 
+                if dt = Date.AddDays(EasterSunday, 1)
+                then [HolidayName = "Ostermontag", IsHoliday = true]
+                else null,
 
-                // LabourDay = always Mai 1st
-                [Date = #date(year, 5, 1), HolidayName = "Tag der Arbeit"],
+            // LabourDay = always Mai 1st
+            LabourDay =
+                if Date.Month(dt) = 5 and Date.Day(dt) = 1 
+                then [HolidayName = "Tag der Arbeit", IsHoliday = true]
+                else null,
 
-                // AscensionDay = 39 days after Easter Sunday
-                [Date = Date.AddDays(EasterSunday, 39), HolidayName = "Christi Himmelfahrt"],
+            // AscensionDay = 39 days after Easter Sunday
+            AscensionDay  = 
+                if dt = Date.AddDays(EasterSunday, 39)
+                then [HolidayName = "Christi Himmelfahrt", IsHoliday = true]
+                else null,
             
-                // WhitMonday = 50 days after Easter Sunday
-                [Date = Date.AddDays(EasterSunday, 50), HolidayName = "Pfingstmontag"],
+            // WhitMonday = 50 days after Easter Sunday
+            WhitMonday  = 
+                if dt = Date.AddDays(EasterSunday, 50)
+                then [HolidayName = "Pfingstmontag", IsHoliday = true]
+                else null,
             
-                // CorpusChristi = 60 days after Easter Sunday
-                [Date = Date.AddDays(EasterSunday, 60), HolidayName = "Fronleichnam"],
+            // CorpusChristi = 60 days after Easter Sunday
+            CorpusChristi   = 
+                if dt = Date.AddDays(EasterSunday, 60)
+                then [HolidayName = "Fronleichnam", IsHoliday = true]
+                else null,
 
-                // GermanUnityDay = always October 3rd
-                [Date = #date(year, 10, 3), HolidayName = "Tag der Deutschen Einheit"],
+            // GermanUnityDay = always October 3rd
+            GermanUnityDay =
+                if Date.Month(dt) = 10 and Date.Day(dt) = 3 
+                then [HolidayName = "Tag der Deutschen Einheit", IsHoliday = true]
+                else null,
 
-                // AllSaintsDay = always November 1st
-                [Date = #date(year, 11, 1), HolidayName = "Allerheiligen"],
+            // AllSaintsDay = always November 1st
+            AllSaintsDay =
+                if Date.Month(dt) = 11 and Date.Day(dt) = 1 
+                then [HolidayName = "Allerheiligen", IsHoliday = true]
+                else null,
 
-                // ChristmasEve = always December 24th
-                [Date = #date(year, 12, 24), HolidayName = "Heiligabend"],
+            // ChristmasEve = always December 24th
+            ChristmasEve =
+                if Date.Month(dt) = 12 and Date.Day(dt) = 24 and IsChristmasEveHoliday
+                then [HolidayName = "Heiligabend", IsHoliday = true]
+                else null,
 
-                // ChristmasDay = always December 25th
-                [Date = #date(year, 12, 25), HolidayName = "1. Weihnachtstag"],
+            // ChristmasDay = always December 25th
+            ChristmasDay =
+                if Date.Month(dt) = 12 and Date.Day(dt) = 25 
+                then [HolidayName = "1. Weihnachtstag", IsHoliday = true]
+                else null,
 
-                // StStephensDay = always December 26th
-                [Date = #date(year, 12, 26), HolidayName = "2. Weihnachtstag"],
+            // StStephensDay = always December 26th
+            StStephensDay =
+                if Date.Month(dt) = 12 and Date.Day(dt) = 26 
+                then [HolidayName = "2. Weihnachtstag", IsHoliday = true]
+                else null,
 
-                // Silvester = always December 31st
-                [Date = #date(year, 12, 31), HolidayName = "Silvester"]
-            }
-        in
-            CurrentYearHolidaysList,
+            // Silvester = always December 31st
+            NewYearsEve =
+                if Date.Month(dt) = 12 and Date.Day(dt) = 31 and IsNewYearsEveHoliday
+                then [HolidayName = "Silvester", IsHoliday = true]
+                else null,
 
-    // get a table of all holidays
-    fnGetAllHolidaysTable = (startYear as number, endYear as number) as table =>
-        let
-            // a list of years starting one year before actual start
-            yearList = {startYear-1..endYear},
-            holidayYearList = List.Transform(yearList, fnGetAllHolidaysOfAYear),
-            holidaysYearListAsTable = Table.FromList(holidayYearList, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
-            expandList = Table.ExpandListColumn(holidaysYearListAsTable, "Column1"),
-            holidaysTable = Table.ExpandRecordColumn(expandList, "Column1", {"Date", "HolidayName"}, {"HolidayDate", "HolidayName"})
-        in
-            holidaysTable,
-    AllHolidaysTable = fnGetAllHolidaysTable(StartYear, EndYear),
+            HolidayRecord = 
+                if      NewYear         <> null then NewYear
+                else if Epiphany        <> null then Epiphany
+                else if GoodFriday      <> null then GoodFriday
+                else if EasterMonday    <> null then EasterMonday
+                else if LabourDay       <> null then LabourDay
+                else if AscensionDay    <> null then AscensionDay
+                else if WhitMonday      <> null then WhitMonday
+                else if CorpusChristi   <> null then CorpusChristi
+                else if GermanUnityDay  <> null then GermanUnityDay
+                else if AllSaintsDay    <> null then AllSaintsDay
+                else if ChristmasEve    <> null then ChristmasEve
+                else if ChristmasDay    <> null then ChristmasDay
+                else if StStephensDay   <> null then StStephensDay
+                else if NewYearsEve     <> null then NewYearsEve
+                else [HolidayName = null, IsHoliday = false],
 
-    // join the date table with AllHolidaysTable
-    JoinHolidaysTable = Table.Join(DaysBackwards, "Date", AllHolidaysTable, "HolidayDate", JoinKind.LeftOuter),
-    // remove the column HolidayDate coming from join
-    RemoveHolidayDate = Table.RemoveColumns(JoinHolidaysTable, "HolidayDate"),
+            IsWeekend = Date.DayOfWeek(dt, Day.Monday) >= 5
+        in 
+            [
+                HolidayName = HolidayRecord[HolidayName], 
+                IsHoliday = HolidayRecord[IsHoliday], 
+                IsWeekend = IsWeekend, 
+                IsWorkingDay = HolidayRecord[IsHoliday] = false and IsWeekend = false
+            ],
 
-    /***** Holiday, weekend, working day flags *****/
-    // is a holiday
-    IsHoliday = Table.AddColumn(RemoveHolidayDate, "IsHoliday", each [HolidayName] <> null, type logical),
-    // is a weekend day
-    IsWeekend = Table.AddColumn(IsHoliday, "IsWeekend", each Date.DayOfWeek([Date]) >= 5, type logical),
-    // is a working day
-    IsWorkingDay = Table.AddColumn(IsWeekend, "IsWorkingDay", each not [IsHoliday] and not [IsWeekend], type logical),
+    HolidayRecord = Table.AddColumn(DaysBackwards, "HolidayRecord", each HolidayFunc([Date])),
+    ExpandHolidayRecord = Table.ExpandRecordColumn(HolidayRecord, "HolidayRecord", {"HolidayName", "IsHoliday", "IsWeekend", "IsWorkingDay"}),  
+    ChangeHolidayRecordTypes = Table.TransformColumnTypes(ExpandHolidayRecord,{{"HolidayName", type text}, {"IsHoliday", type logical}, {"IsWeekend", type logical}, {"IsWorkingDay", type logical}}), 
     
+    /***** Transform column data types *****/
+    // use data type text for Year, Month, and IsoYearWeek because it prevents the automatical summarization in PowerBI Desktop
+    TransformNumberToText = Table.TransformColumnTypes(ChangeHolidayRecordTypes,{{"Year", type text}, {"Month", type text}, {"IsoYearWeek", type text}}),    
+
     // sort the table by date
-    SortByDate = Table.Sort(IsWorkingDay, {"Date"}),  
+    SortByDate = Table.Sort(TransformNumberToText, {"Date"}),    
 
     /***** Translation of columns to German *****/
     ColumnTranslation = Table.RenameColumns(
@@ -204,23 +265,27 @@ let
             {"Month", "Monat"}, 
             {"MonthTwoDigits", "Monat (2 Ziffern)"}, 
             {"YearMonth", "Jahr u. Monat"}, 
-            {"MonthName", "Monatsname"}, 
+            {"MonthName", "Monatsname"},
             {"MonthNameAbbreviated", "Monatsname gekürzt"}, 
             {"MonthNameYear", "Monatsname u. Jahr"}, 
+            {"MonthNameAbbreviatedYear", "Monatsname gekürzt u. Jahr"}, 
             {"DayOfMonth", "Monatstag"}, 
             {"DayOfYear", "Jahrestag"}, 
             {"WeekOfYear", "Jahreswoche"}, 
             {"DayOfWeek", "Wochentag"}, 
             {"DayOfWeekName", "Wochentagsname"}, 
             {"DayOfWeekNameAbbreviated", "Wochentagsname gekürzt"}, 
-            {"IsoYearWeek", "ISO Woche"}, 
+            {"IsoYearWeek", "ISO Woche"},
             {"IsoYearWeekIndex", "ISO Woche Index"}, 
+            {"FiscalMonth", "Fiskalmonat"}, 
+            {"FiscalYearMonth", "Fiskal Jahr u. Monat"}, 
             {"YearBackwards", "Jahre rückliegend"}, 
             {"QuartersBackwards", "Quartale rückliegend"}, 
             {"MonthsBackwards", "Monate rückliegend"}, 
+            {"Is13MonthsBackwards", "Ist 13 Monate rückliegend"}, 
             {"WeeksBackwards", "Wochen rückliegend"}, 
             {"DaysBackwards", "Tage rückliegend"}, 
-            {"IsWeekend", "Ist Wochenende"}, 
+            {"IsWeekend", "Ist Wochenende"},
             {"HolidayName", "Feiertagsname"}, 
             {"IsHoliday", "Ist Feiertag"}, 
             {"IsWorkingDay", "Ist Arbeitstag"}
