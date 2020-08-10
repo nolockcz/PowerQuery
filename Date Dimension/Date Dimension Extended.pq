@@ -1,6 +1,6 @@
 let
     /*****
-        Date Dimension Extended.pq
+        Date Dimension Core.pq
         Author: Michal Dvorak (Nolock)
         Created: June 2019
         Updated:
@@ -8,6 +8,9 @@ let
                 - Added MonthNameAbbreviatedYear (i.e. Jan 2020)
                 - Added FiscalMonth and FiscalYearMonth
                 - Added Is13MonthsBackwards
+                - Added LastWorkingDate
+                - Added IsLastWorkingDate
+                - Added IsCurrentBillingMonth
                 - Bugfix for the date 1.5.2008 (two holidays are celebrated on this date which produces 2 rows for one day)
     *****/
 
@@ -245,9 +248,66 @@ let
     ExpandHolidayRecord = Table.ExpandRecordColumn(HolidayRecord, "HolidayRecord", {"HolidayName", "IsHoliday", "IsWeekend", "IsWorkingDay"}),  
     ChangeHolidayRecordTypes = Table.TransformColumnTypes(ExpandHolidayRecord,{{"HolidayName", type text}, {"IsHoliday", type logical}, {"IsWeekend", type logical}, {"IsWorkingDay", type logical}}), 
     
+    // calculate the last working date before a date
+    LastWorkingDateFunc = (holidays as record, dt as date) as date =>
+        let
+            MaxCountOfHolidaysInRow = 6, // Sa, Sun, Mo(24.12.), Tue(25.12.), Wed(26.12.)
+            // get a list of descending dates starting on yesterday
+            ListOfLastDatesDescending = List.Dates(Date.AddDays(dt, -1), MaxCountOfHolidaysInRow, #duration(-1,0,0,0)),
+            // select only those which aren't in the record with holidays
+            ListOfLastDatesWithoutHoliday = List.Select(ListOfLastDatesDescending, each not Record.HasFields(holidays, Date.ToText(_, "dd.MM.yyyy"))),
+            // take only the first element of descending list - last working date
+            LastWorkingDate = List.First(ListOfLastDatesWithoutHoliday)
+        in
+            LastWorkingDate,
+    
+    // a record containing all not-working days in a form of a look-up table
+    NotWorkingDaysTempRecord = 
+        let
+            StartDate = #date(StartYear - 1, 1, 1),
+            EndDate = #date(EndYear, 12, 31),
+            NumberOfDays = Duration.Days( EndDate - StartDate ),
+            ListOfDates = List.Dates(StartDate, NumberOfDays+1, #duration(1,0,0,0)),
+            DatesAsTable = Table.FromList(ListOfDates, Splitter.SplitByNothing(), {"Date"}, null, ExtraValues.Error),
+            DateColumnAsDate = Table.TransformColumnTypes(DatesAsTable,{{"Date", type date}}),
+            HolidayRecord = Table.AddColumn(DateColumnAsDate, "HolidayRecord", each HolidayFunc([Date])),
+            ExpandHolidayRecord = Table.ExpandRecordColumn(HolidayRecord, "HolidayRecord", {"IsWorkingDay"}),
+            OnlyHolidaysDays = Table.SelectRows(ExpandHolidayRecord, each not [IsWorkingDay]),
+            DateAsListBuffered = List.Buffer(OnlyHolidaysDays[Date]),
+            DateAsRecord = List.Accumulate(
+                DateAsListBuffered,
+                [],
+                (state, current) => 
+                    state & 
+                    Expression.Evaluate(
+                        "[" & Date.ToText(current, "dd.MM.yyyy") & "= true]", 
+                        [current = current]
+                    )
+            )
+        in
+            DateAsRecord,
+
+    // get the last working day before today (like on Sa, Su, and Mo it is Friday if Friday was a working day)
+    LastWorkingDate = Table.AddColumn(ChangeHolidayRecordTypes, "LastWorkingDate", each LastWorkingDateFunc(NotWorkingDaysTempRecord, [Date]), type date),
+
+    // is last working date?
+    LastWorkingDayOfToday = LastWorkingDateFunc(NotWorkingDaysTempRecord, DateTime.Date(DateTime.LocalNow())),
+    IsLastWorkingDate = Table.AddColumn(LastWorkingDate, "IsLastWorkingDate", each [Date] = LastWorkingDayOfToday, type logical),
+
+    // is current billing month?   
+    IsCurrentBillingMonthFunc = (dt as date, lastWorkingDt as date) as logical =>
+        let            
+            result = 
+                Date.Year(dt) = Date.Year(lastWorkingDt) and 
+                Date.Month(dt) = Date.Month(lastWorkingDt) and 
+                dt <= lastWorkingDt
+        in
+            result,
+    IsCurrentBillingMonth = Table.AddColumn(IsLastWorkingDate, "IsCurrentBillingMonth", each IsCurrentBillingMonthFunc([Date], LastWorkingDayOfToday), type logical),
+    
     /***** Transform column data types *****/
     // use data type text for Year, Month, and IsoYearWeek because it prevents the automatical summarization in PowerBI Desktop
-    TransformNumberToText = Table.TransformColumnTypes(ChangeHolidayRecordTypes,{{"Year", type text}, {"Month", type text}, {"IsoYearWeek", type text}}),    
+    TransformNumberToText = Table.TransformColumnTypes(IsCurrentBillingMonth,{{"Year", type text}, {"Month", type text}, {"IsoYearWeek", type text}}),    
 
     // sort the table by date
     SortByDate = Table.Sort(TransformNumberToText, {"Date"}),    
@@ -288,7 +348,10 @@ let
             {"IsWeekend", "Ist Wochenende"},
             {"HolidayName", "Feiertagsname"}, 
             {"IsHoliday", "Ist Feiertag"}, 
-            {"IsWorkingDay", "Ist Arbeitstag"}
+            {"IsWorkingDay", "Ist Arbeitstag"}, 
+            {"LastWorkingDate", "Letzter Arbeitstag"}, 
+            {"IsLastWorkingDate", "Ist letzter Arbeitstag"}, 
+            {"IsCurrentBillingMonth", "Ist aktueller Abrechnungsmonat"}
         }
     )
 in
