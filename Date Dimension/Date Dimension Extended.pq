@@ -153,7 +153,7 @@ let
                 else null,
 
             // EasterMonday = 1 day after Easter Sunday
-            EasterMonday  = 
+            EasterMonday = 
                 if dt = Date.AddDays(EasterSunday, 1)
                 then [HolidayName = "Ostermontag", IsHoliday = true]
                 else null,
@@ -165,19 +165,19 @@ let
                 else null,
 
             // AscensionDay = 39 days after Easter Sunday
-            AscensionDay  = 
+            AscensionDay = 
                 if dt = Date.AddDays(EasterSunday, 39)
                 then [HolidayName = "Christi Himmelfahrt", IsHoliday = true]
                 else null,
             
             // WhitMonday = 50 days after Easter Sunday
-            WhitMonday  = 
+            WhitMonday = 
                 if dt = Date.AddDays(EasterSunday, 50)
                 then [HolidayName = "Pfingstmontag", IsHoliday = true]
                 else null,
             
             // CorpusChristi = 60 days after Easter Sunday
-            CorpusChristi   = 
+            CorpusChristi = 
                 if dt = Date.AddDays(EasterSunday, 60)
                 then [HolidayName = "Fronleichnam", IsHoliday = true]
                 else null,

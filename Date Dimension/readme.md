@@ -24,16 +24,45 @@ There is also a group of columns calculating a count of years backwards, vice ve
 
 And finally, the holy grail - holidays! In many business use cases, it is crucial that we know if a definite date is a working day or not. And what is a working day? It is a day which is neither weekend nor an official holiday. Countries (or even states within a country) have their own holidays. How have I solved this diversity? I have not yet. I have prepared the dimension for holidays in the state of Baden-Württemberg in Germany. And it is your task to check out the list and remove or add new holidays – it is very simple, trust me.
 
-How to modify the list of holidays? There is a function called *fnGetAllHolidaysOfAYear* which generates all holidays in a year. In Germany, most of them are based on the Easter Sunday and that is also my starting point. Then I generate a list *CurrentYearHolidaysList* which contains the definition of all holidays in one year.
+How to modify the list of holidays? There is a function called *HolidayFunc* which checks if there is a holiday on a selected date. In Germany, most of them are based on the Easter Sunday.
+
+```m
+// get a date of Easter Sunday (Source: https://en.wikipedia.org/wiki/Computus)
+EasterSundayFunc = (year as number) as date =>
+    let
+        a = Number.Mod(year, 19),
+        b = Number.RoundDown(year / 100),
+        c = Number.Mod(year, 100),
+        d = Number.RoundDown(b / 4),
+        e = Number.Mod(b, 4),
+        f = Number.RoundDown((b + 8) / 25),
+        g = Number.RoundDown((b - f + 1) / 3),
+        h = Number.Mod((19 * a + b - d - g + 15), 30),
+        i = Number.RoundDown(c / 4),
+        k = Number.Mod(c, 4),
+        l = Number.Mod((32 + 2 * e + 2 * i - h - k), 7),
+        m = Number.RoundDown((a + 11 * h + 22 * l) / 451),
+        n = Number.RoundDown((h + l - 7 * m + 114) / 31),
+        p = Number.Mod((h + l - 7 * m + 114), 31) + 1,
+        dt = #date(year, n, p)
+    in
+        dt
+```
 
 Example New Year and Easter Monday:
 ```m
 // NewYear = always January 1st
-[Date = #date(year, 1, 1), HolidayName = "Neujahr"],
+NewYear = 
+    if Date.Month(dt) = 1 and Date.Day(dt) = 1 
+    then [HolidayName = "Neujahr", IsHoliday = true]
+    else null
 ```
 ```m
 // EasterMonday = 1 day after Easter Sunday
-[Date = Date.AddDays(EasterSunday, 1), HolidayName = "Ostermontag"],
+EasterMonday = 
+    if dt = Date.AddDays(EasterSunday, 1)
+    then [HolidayName = "Ostermontag", IsHoliday = true]
+    else null
 ```
 
 The last thing I do is translating all column names. Now you are back in the game again. It is up to you to change these translation pairs.
