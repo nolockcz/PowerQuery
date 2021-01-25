@@ -1,7 +1,7 @@
 let
     /*****
         Date Dimension Core.pq
-        Author: Michal Dvorak (Nolock)
+        Author: Michal Dvorak (@nolockcz)
         Created: June 2019
         Updated:
             August 2020
@@ -9,6 +9,8 @@ let
                 - Added FiscalMonth and FiscalYearMonth
                 - Added Is13MonthsBackwards
                 - Bugfix for the date 1.5.2008 (two holidays are celebrated on this date which produces 2 rows for one day)
+            January 2021
+                - Bugfix: WeeksBackwards calculated wrong every 5 to 6 years
     *****/
 
     /***** Params *****/
@@ -77,34 +79,34 @@ let
     FiscalYearMonth = Table.AddColumn(FiscalMonth, "FiscalYearMonth", each Text.From([Year] * 100 + [FiscalMonth]), type text),
 
     /***** Years, Months, Weeks, and Days backwards *****/
-    YearBackwards = Table.AddColumn(FiscalYearMonth, "YearBackwards", each Date.Year(DateTime.LocalNow()) - [Year], Int32.Type),
-    QuartersBackwards = Table.AddColumn(YearBackwards, "QuartersBackwards", each (Date.Year(DateTime.LocalNow()) * 4 + Date.QuarterOfYear(DateTime.LocalNow())) - ([Year] * 4 + Date.QuarterOfYear([Date])), Int32.Type),    
-    MonthsBackwards = Table.AddColumn(QuartersBackwards, "MonthsBackwards", each (Date.Year(DateTime.LocalNow()) * 12 + Date.Month(DateTime.LocalNow())) - ([Year] * 12 + [Month]), Int32.Type),    
+    Today = DateTime.Date(DateTime.LocalNow()),
+    YearBackwards = Table.AddColumn(FiscalYearMonth, "YearBackwards", each Date.Year(Today) - [Year], Int32.Type),
+    QuartersBackwards = Table.AddColumn(YearBackwards, "QuartersBackwards", each (Date.Year(Today) * 4 + Date.QuarterOfYear(Today)) - ([Year] * 4 + Date.QuarterOfYear([Date])), Int32.Type),    
+    MonthsBackwards = Table.AddColumn(QuartersBackwards, "MonthsBackwards", each (Date.Year(Today) * 12 + Date.Month(Today)) - ([Year] * 12 + [Month]), Int32.Type),    
     Is13MonthsBackwards = Table.AddColumn(MonthsBackwards, "Is13MonthsBackwards", each [MonthsBackwards] >= 1 and [MonthsBackwards] <= 13, type logical),
-
-    TempYearWeek = Table.AddColumn(Is13MonthsBackwards, "TempYearWeek", each [Year]*100+[WeekOfYear]),    
-    WeekCountHelpTable = 
-        // create a date table with a week counter
-        let                        
-            WeekCountHelpTable_YearWeek = Table.AddColumn(DateColumnAsDate, "WeekCountHelpTable_YearWeek", each Date.Year([Date]) * 100 + Date.WeekOfYear([Date])),
-            WeekCountHelpTable_YearWeekDistinct = Table.Distinct(WeekCountHelpTable_YearWeek, {"WeekCountHelpTable_YearWeek"}),
-            WeekCountHelpTable_WeekCounter = Table.AddIndexColumn(WeekCountHelpTable_YearWeekDistinct, "WeekCountHelpTable_WeekCounter", 0, 1),            
-            WeekCountHelpTable_IsCurrentWeek = Table.AddColumn(WeekCountHelpTable_WeekCounter, "WeekCountHelpTable_IsCurrentWeek", each Date.IsInCurrentWeek([Date]), type logical),
-            WeekCountHelpTable_ChangeType = Table.TransformColumnTypes(WeekCountHelpTable_IsCurrentWeek,{{"WeekCountHelpTable_WeekCounter", Int64.Type}})
-        in
-            WeekCountHelpTable_ChangeType,
-    // join dim date table with WeekCountHelpTable
-    JoinWithWeekCountHelpTable = Table.NestedJoin(TempYearWeek,{"TempYearWeek"},WeekCountHelpTable,{"WeekCountHelpTable_YearWeek"},"WeekCountHelpTable", JoinKind.LeftOuter),    
-    ExpandWeekCountHelpTable = Table.ExpandTableColumn(JoinWithWeekCountHelpTable, "WeekCountHelpTable", {"WeekCountHelpTable_WeekCounter", "WeekCountHelpTable_IsCurrentWeek"}, {"TempWeekCountHelpTable_WeekCounter", "TempWeekCountHelpTable_IsCurrentWeek"}),
-    TempCurrentWeekFirstRow = Table.AddColumn(ExpandWeekCountHelpTable, "TempCurrentWeekFirstRow", each Table.SelectRows(WeekCountHelpTable, each ([WeekCountHelpTable_IsCurrentWeek] = true)){0}),
-    TempWeekCounterOfToday = Table.ExpandRecordColumn(TempCurrentWeekFirstRow, "TempCurrentWeekFirstRow", {"WeekCountHelpTable_WeekCounter"}, {"TempWeekCounterOfToday"}),
-    WeeksBackwards = Table.AddColumn(TempWeekCounterOfToday, "WeeksBackwards", each [TempWeekCounterOfToday] - [TempWeekCountHelpTable_WeekCounter], Int32.Type),
-    RemoveTempColumns = Table.RemoveColumns(WeeksBackwards,{"TempYearWeek", "TempWeekCountHelpTable_WeekCounter", "TempWeekCountHelpTable_IsCurrentWeek", "TempWeekCounterOfToday"}),
-    DaysBackwards = Table.AddColumn(RemoveTempColumns, "DaysBackwards", each Duration.Days(Duration.From(DateTime.Date(DateTime.LocalNow()) - [Date])), Int32.Type),
+    DaysBackwards = Table.AddColumn(Is13MonthsBackwards, "DaysBackwards", each Duration.Days(Duration.From(Today - [Date])), Int32.Type),
+    WeeksBackwards = Table.AddColumn(
+        DaysBackwards, 
+        "WeeksBackwards", 
+        each 
+            if [DaysBackwards] > 0 then 
+                Number.RoundDown(
+                    ([DaysBackwards] - (Date.DayOfWeek(Today, Day.Monday) + 1)) / 7 + 1,
+                    0
+                ) 
+            else if [DaysBackwards] = 0 then
+                0
+            else
+                Number.RoundDown(
+                    (-[DaysBackwards] - 7 + (Date.DayOfWeek(Today, Day.Monday))) / 7 + 1,
+                    0
+                ), 
+        Int32.Type
+    ),
 
     /***** Transform column data types *****/
     // use data type text for Year, Month, and IsoYearWeek because it prevents the automatical summarization in PowerBI Desktop
-    TransformNumberToText = Table.TransformColumnTypes(DaysBackwards,{{"Year", type text}, {"Month", type text}, {"IsoYearWeek", type text}}),    
+    TransformNumberToText = Table.TransformColumnTypes(WeeksBackwards,{{"Year", type text}, {"Month", type text}, {"IsoYearWeek", type text}}),    
 
     // sort the table by date
     SortByDate = Table.Sort(TransformNumberToText, {"Date"}),    
