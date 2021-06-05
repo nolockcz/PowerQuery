@@ -11,13 +11,15 @@ let
                 - Bugfix for the date 1.5.2008 (two holidays are celebrated on this date which produces 2 rows for one day)
             January 2021
                 - Bugfix: WeeksBackwards calculated wrong every 5 to 6 years
+            June 2021
+                - Modif: Set a new time window (-10, +2) years
     *****/
 
     /***** Params *****/
-    // Start year of date dim table
-    StartYear = 2000,
-    // End year of date dim table
-    EndYear = 2039,
+    // Start year of date dim table (last 10 whole years)
+    StartYear = Date.Year(DateTime.LocalNow()) - 10,
+    // End year of date dim table (next 2 whole years)
+    EndYear = Date.Year(DateTime.LocalNow()) + 2,
     /***** End of Params *****/
 
     /***** Table with one date column *****/
