@@ -44,7 +44,7 @@ NolockDataLakeCustomConnector.Publish = [
         APP_CONSTANTS[APP_LABEL],
         APP_CONSTANTS[APP_DESCRIPTION]
     },
-    LearnMoreUrl = "https://github.com/nolockcz/PowerQuery/ADLS%20Gen2%20Custom%20Data%20Connector",
+    LearnMoreUrl = "https://github.com/nolockcz/PowerQuery/tree/master/ADLS%20Gen2%20Custom%20Data%20Connector",
     SourceImage = NolockDataLakeCustomConnector.Icons,
     SourceTypeImage = NolockDataLakeCustomConnector.Icons
 ];
