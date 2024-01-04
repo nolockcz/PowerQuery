@@ -16,6 +16,8 @@ let
                 - Bugfix: WeeksBackwards calculated wrong every 5 to 6 years
             June 2021
                 - Modif: Set a new time window (-10, +2) years
+            January 2024
+                - Bugfix: Elias Steinle (https://powerlyze.com/) identified an issue in the IsoYearWeek column. The problem was that the ISO year was incorrectly computed if the first ISO week began in the preceding year.
     *****/
 
     /***** Params *****/
@@ -75,10 +77,14 @@ let
                 else 
                     WeekNumOfYear,
             // if IsoWeek is 52 or 53, but it's January, then IsoWeek belongs to the previous year
+            // if IsoWeek is 1 and it's still December, then IsoWeek belongs to the next year
             IsoYear = 
                 if (IsoWeek >= 52 and Date.Month(currentDate) = 1) 
-                then Date.Year(currentDate) - 1 
-                else Date.Year(currentDate)
+                    then Date.Year(currentDate) - 1
+                else if (IsoWeek = 1 and Date.Month(currentDate) = 12) 
+                    then Date.Year(currentDate) + 1
+                else 
+                    Date.Year(currentDate)
         in 
             IsoYear * 100 + IsoWeek,
     IsoYearWeek = Table.AddColumn(DayOfWeekNameAbbreviated, "IsoYearWeek", each IsoYearWeekFunc([Date]), Int32.Type),
